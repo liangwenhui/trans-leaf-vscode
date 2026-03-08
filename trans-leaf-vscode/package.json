@@ -1,0 +1,141 @@
+{
+  "name": "trans-leaf",
+  "displayName": "Trans-Leaf",
+  "description": "AI 驱动的专业翻译工具，保留原文格式",
+  "version": "0.1.0",
+  "publisher": "trans-leaf",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "transLeaf.translateSelectionToZh",
+        "title": "Trans-Leaf: 翻译选中文本为中文"
+      },
+      {
+        "command": "transLeaf.translateSelectionToEn",
+        "title": "Trans-Leaf: Translate Selection to English"
+      },
+      {
+        "command": "transLeaf.translateFileToZh",
+        "title": "Trans-Leaf: 翻译全文为中文"
+      },
+      {
+        "command": "transLeaf.translateFileToEn",
+        "title": "Trans-Leaf: Translate File to English"
+      },
+      {
+        "command": "transLeaf.showMenu",
+        "title": "Trans-Leaf: 显示菜单"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "transLeaf.translateSubMenu",
+          "when": "editorHasSelection",
+          "group": "1_modification@1"
+        }
+      ],
+      "transLeaf.translateSubMenu": [
+        {
+          "command": "transLeaf.translateSelectionToZh",
+          "group": "1_lang@1"
+        },
+        {
+          "command": "transLeaf.translateSelectionToEn",
+          "group": "1_lang@2"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "transLeaf.translateSubMenu",
+        "label": "Trans-Leaf 翻译"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "transLeaf-sidebar",
+          "title": "Trans-Leaf",
+          "icon": "assets/leaf.svg"
+        }
+      ]
+    },
+    "views": {
+      "transLeaf-sidebar": [
+        {
+          "type": "webview",
+          "id": "transLeaf.chatView",
+          "name": "Chat",
+          "contextualTitle": "Trans-Leaf Chat"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "transLeaf.translateSelectionToZh",
+        "key": "ctrl+alt+t",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "transLeaf.translateFileToZh",
+        "key": "ctrl+alt+shift+t",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Trans-Leaf",
+      "properties": {
+        "transLeaf.provider": {
+          "type": "string",
+          "default": "mock",
+          "enum": ["mock", "claude", "openai", "deepseek"],
+          "description": "翻译服务提供商"
+        },
+        "transLeaf.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "AI API Key（在设置中输入，不要写入代码仓库）"
+        },
+        "transLeaf.model": {
+          "type": "string",
+          "default": "",
+          "description": "AI 模型名称（留空则使用各服务商默认模型）"
+        },
+        "transLeaf.concurrency": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "并发翻译段数（分段翻译时同时处理的段数）"
+        },
+        "transLeaf.apiBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "自定义 API 地址（用于代理或兼容服务）"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "esbuild --bundle src/extension.ts --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --sourcemap",
+    "watch": "esbuild --bundle src/extension.ts --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --watch",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0"
+  }
+}
