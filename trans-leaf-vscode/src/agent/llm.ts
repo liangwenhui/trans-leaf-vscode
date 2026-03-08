@@ -41,8 +41,15 @@ export class LLMClient {
     this.provider = config.provider;
     this.apiKey = config.apiKey;
     this.model = config.model;
-    this.baseUrl = config.apiBaseUrl || DEFAULT_CONFIGS[config.provider].baseUrl;
-    this.defaultConfig = DEFAULT_CONFIGS[config.provider];
+
+    // mock provider 没有默认配置，跳过
+    if (config.provider === 'mock') {
+      this.baseUrl = '';
+      this.defaultConfig = DEFAULT_CONFIGS.openai; // 占位，mock 不会用到
+    } else {
+      this.defaultConfig = DEFAULT_CONFIGS[config.provider];
+      this.baseUrl = config.apiBaseUrl || this.defaultConfig.baseUrl;
+    }
   }
 
   /**

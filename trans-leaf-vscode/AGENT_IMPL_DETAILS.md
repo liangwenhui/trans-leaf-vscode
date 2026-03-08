@@ -169,7 +169,7 @@ for (const call of response.tool_calls) {
 
 ```typescript
 // toolRegistry.ts 底部导出
-export function createToolRegistry(): ToolRegistry {
+export async function createToolRegistry(): Promise<ToolRegistry> {
   const registry = new ToolRegistry();
   registry.register(new TranslateTextTool());
   registry.register(new ReadFileTool());
@@ -290,7 +290,7 @@ return new Promise((resolve, reject) => {
 
 ## 6. ChatView 改造 — 具体修改点
 
-### 后端 `chatView.ts` 变更
+### 后端 `chatView.ts` 变更（位于 `src/webview/chatView.ts`）
 
 **新增 import**（文件顶部）：
 

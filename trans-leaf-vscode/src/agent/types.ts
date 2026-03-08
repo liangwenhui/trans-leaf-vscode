@@ -10,7 +10,7 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 /**
  * 基础消息接口
  */
-export interface Message {
+export interface BaseMessage {
   role: MessageRole;
   content: string;
 }
@@ -18,20 +18,26 @@ export interface Message {
 /**
  * 带工具调用的 Assistant 消息
  */
-export interface AssistantMessageWithTools extends Message {
+export interface AssistantMessageWithTools {
   role: 'assistant';
+  content: string;
   tool_calls?: ToolCall[];
 }
 
 /**
  * 工具结果消息
  */
-export interface ToolMessage extends Message {
+export interface ToolMessage {
   role: 'tool';
   tool_call_id: string;
   content: string;
   is_error?: boolean;
 }
+
+/**
+ * 统一消息类型（联合类型）
+ */
+export type Message = BaseMessage | AssistantMessageWithTools | ToolMessage;
 
 /**
  * 工具定义（统一格式）

@@ -36,7 +36,9 @@ export class TranslateTextTool implements Tool {
     }
 
     const translator = createTranslator();
-    const { systemPrompt, userPrompt } = buildSimpleSelectionPrompt(text, 'auto', targetLang);
+    // 根据目标语言推断源语言（翻译到中文 → 源是英文，反之亦然）
+    const sourceLang = targetLang === 'zh-CN' ? 'en' : 'zh-CN';
+    const { systemPrompt, userPrompt } = buildSimpleSelectionPrompt(text, sourceLang, targetLang);
     const result = await translator.translateWithPrompt({ systemPrompt, userPrompt });
 
     if (!result.success) {

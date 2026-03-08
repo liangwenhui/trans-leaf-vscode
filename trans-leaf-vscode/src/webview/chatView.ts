@@ -10,6 +10,7 @@ export class ChatView {
   private readonly _panel: vscode.WebviewView;
   private _disposables: vscode.Disposable[] = [];
   private agentLoop: AgentLoop | null = null;
+  private _agentReady: Promise<void>;
   private _pendingConfirm?: (confirmed: boolean) => void;
 
   constructor(
@@ -27,8 +28,8 @@ export class ChatView {
     // 初始化 HTML
     this._panel.webview.html = this._getHtmlForWebview();
 
-    // 初始化 Agent Loop
-    this.initAgentLoop();
+    // 初始化 Agent Loop（保存 promise 用于等待）
+    this._agentReady = this.initAgentLoop();
 
     // 监听来自 webview 的消息
     this._panel.webview.onDidReceiveMessage(
@@ -48,40 +49,49 @@ export class ChatView {
    * 初始化 Agent Loop
    */
   private async initAgentLoop(): Promise<void> {
-    const config = getConfig();
-    const toolRegistry = await createToolRegistry();
+    try {
+      const config = getConfig();
+      const toolRegistry = await createToolRegistry();
 
-    this.agentLoop = new AgentLoop(config, toolRegistry.getAll(), {
-      onAssistantText: (text) => {
-        this._panel.webview.postMessage({ type: 'assistant-text', text });
-      },
-      onToolCall: (name, args) => {
-        this._panel.webview.postMessage({ type: 'tool-call', name, args });
-      },
-      onToolResult: (name, result, isError) => {
-        this._panel.webview.postMessage({ type: 'tool-result', name, result, isError });
-      },
-      onConfirmRequest: (name, args) => {
-        return new Promise((resolve) => {
-          this._pendingConfirm = resolve;
-          this._panel.webview.postMessage({ type: 'confirm', name, args });
-        });
-      },
-      onDone: () => {
-        this._panel.webview.postMessage({ type: 'done' });
-      },
-      onError: (error) => {
-        this._panel.webview.postMessage({ type: 'error', error });
-      },
-    });
+      this.agentLoop = new AgentLoop(config, toolRegistry.getAll(), {
+        onAssistantText: (text) => {
+          this._panel.webview.postMessage({ type: 'assistant-text', text });
+        },
+        onToolCall: (name, args) => {
+          this._panel.webview.postMessage({ type: 'tool-call', name, args });
+        },
+        onToolResult: (name, result, isError) => {
+          this._panel.webview.postMessage({ type: 'tool-result', name, result, isError });
+        },
+        onConfirmRequest: (name, args) => {
+          return new Promise((resolve) => {
+            this._pendingConfirm = resolve;
+            this._panel.webview.postMessage({ type: 'confirm', name, args });
+          });
+        },
+        onDone: () => {
+          this._panel.webview.postMessage({ type: 'done' });
+        },
+        onError: (error) => {
+          this._panel.webview.postMessage({ type: 'error', error });
+        },
+      });
+    } catch (error) {
+      console.error('Agent 初始化失败:', error);
+      // agentLoop 保持 null，_handleMessage 会发送错误消息
+    }
   }
 
   private async _handleMessage(message: any): Promise<void> {
     switch (message.type) {
       case 'chat':
-        // 新的 Agent 对话模式
+        // 等待 Agent 初始化完成，然后发送消息
+        await this._agentReady;
         if (this.agentLoop) {
           await this.agentLoop.handleUserMessage(message.text);
+        } else {
+          this._panel.webview.postMessage({ type: 'error', error: 'Agent 初始化失败，请检查配置后重试' });
+          this._panel.webview.postMessage({ type: 'done' });
         }
         break;
       case 'reset':
@@ -415,6 +425,61 @@ export class ChatView {
       padding-top: 8px;
       border-top: 1px solid var(--vscode-widget-border);
     }
+
+    /* 确认面板 */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .confirm-box {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      padding: 16px;
+      max-width: 90%;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .confirm-box p {
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .confirm-box pre {
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 11px;
+      margin-bottom: 12px;
+      padding: 8px;
+      background: var(--vscode-textBlockQuote-background, rgba(127,127,127,0.1));
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .confirm-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .confirm-buttons button {
+      padding: 5px 14px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--vscode-foreground);
+    }
+    .confirm-buttons button.primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+    }
   </style>
 </head>
 <body>
@@ -456,6 +521,7 @@ export class ChatView {
   </div>
 
   <script nonce="${nonce}">
+    console.log('[Trans-Leaf] Webview script loaded');
     const vscode = acquireVsCodeApi();
 
     // DOM
@@ -643,11 +709,34 @@ export class ChatView {
         }
 
         case 'confirm': {
-          const yes = confirm(
-            'AI 想要执行 ' + message.name + ':\n' +
-            JSON.stringify(message.args, null, 2) + '\n\n是否允许？'
-          );
-          vscode.postMessage({ type: 'confirm-result', confirmed: yes });
+          const overlay = document.createElement('div');
+          overlay.className = 'confirm-overlay';
+          const box = document.createElement('div');
+          box.className = 'confirm-box';
+          const p = document.createElement('p');
+          p.textContent = 'AI 想要执行: ' + message.name;
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(message.args, null, 2);
+          const btns = document.createElement('div');
+          btns.className = 'confirm-buttons';
+          const denyBtn = document.createElement('button');
+          denyBtn.textContent = '拒绝';
+          const allowBtn = document.createElement('button');
+          allowBtn.className = 'primary';
+          allowBtn.textContent = '允许';
+          function respond(confirmed) {
+            overlay.remove();
+            vscode.postMessage({ type: 'confirm-result', confirmed: confirmed });
+          }
+          denyBtn.addEventListener('click', function() { respond(false); });
+          allowBtn.addEventListener('click', function() { respond(true); });
+          btns.appendChild(denyBtn);
+          btns.appendChild(allowBtn);
+          box.appendChild(p);
+          box.appendChild(pre);
+          box.appendChild(btns);
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
           break;
         }
 
