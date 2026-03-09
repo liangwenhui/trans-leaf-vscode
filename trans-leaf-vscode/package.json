@@ -2,7 +2,7 @@
   "name": "trans-leaf",
   "displayName": "Trans-Leaf",
   "description": "AI 驱动的专业翻译工具，保留原文格式",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "trans-leaf",
   "engines": {
     "vscode": "^1.85.0"
