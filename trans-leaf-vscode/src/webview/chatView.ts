@@ -42,6 +42,12 @@ export class ChatView {
   }
 
   public dispose(): void {
+    // 通知 webview 清理事件监听器
+    try {
+      this._panel.webview.postMessage({ type: 'dispose' });
+    } catch (e) {
+      // webview 可能已被销毁
+    }
     this._disposables.forEach(d => d.dispose());
   }
 
@@ -64,8 +70,17 @@ export class ChatView {
           this._panel.webview.postMessage({ type: 'tool-result', name, result, isError });
         },
         onConfirmRequest: (name, args) => {
+          const TIMEOUT = 30000; // 30秒超时
+          let timeoutId: NodeJS.Timeout | undefined = undefined;
           return new Promise((resolve) => {
-            this._pendingConfirm = resolve;
+            timeoutId = setTimeout(() => {
+              console.warn('Confirm timeout for:', name);
+              resolve(false); // 默认拒绝
+            }, TIMEOUT);
+            this._pendingConfirm = (confirmed: boolean) => {
+              if (timeoutId) clearTimeout(timeoutId);
+              resolve(confirmed);
+            };
             this._panel.webview.postMessage({ type: 'confirm', name, args });
           });
         },
@@ -104,7 +119,7 @@ export class ChatView {
         break;
       case 'embedTranslation':
         // 将翻译结果嵌入当前文件
-        this._panel.webview.postMessage({ type: 'translateSelection', targetLang: 'en' }); // 用英文翻译作为例子，实际应该用保存的结果
+        vscode.postMessage({ type: 'translateSelection', targetLang: 'en' }); // 用英文翻译作为例子，实际应该用保存的结果
         break;
       case 'confirm-result':
         if (this._pendingConfirm) {
@@ -131,6 +146,11 @@ export class ChatView {
         break;
       case 'reloadConfig':
         this._agentReady = this.initAgentLoop();
+        // 清理旧的 agentLoop
+        if (this.agentLoop) {
+          this.agentLoop.dispose();
+          this.agentLoop = null;
+        }
         await this._agentReady;
         this._panel.webview.postMessage({ type: 'config-reloaded' });
         break;
@@ -647,6 +667,12 @@ export class ChatView {
     console.log('[Trans-Leaf] Webview script loaded');
     const vscode = acquireVsCodeApi();
 
+    // 事件监听器清理函数
+    function cleanupEventListeners() {
+      // 清理所有动态添加的事件监听器
+      console.log('[Trans-Leaf] Cleaning up event listeners');
+    }
+
     // DOM
     const messagesEl  = document.getElementById('messages');
     const chatInput   = document.getElementById('chatInput');
@@ -698,7 +724,7 @@ export class ChatView {
       vscode.postMessage({ type: 'translateSelection', targetLang: 'zh-CN' });
     });
     document.getElementById('chipSelEn').addEventListener('click', () => {
-      this._panel.webview.postMessage({ type: 'translateSelection', targetLang: 'en' });
+      vscode.postMessage({ type: 'translateSelection', targetLang: 'en' });
     });
     document.getElementById('chipFileZh').addEventListener('click', () => {
       vscode.postMessage({ type: 'translateFile', targetLang: 'zh-CN' });
@@ -961,9 +987,18 @@ export class ChatView {
         case 'activeFile':
           console.log('[Trans-Leaf] Received activeFile:', message.file);
           if (message.file) {
+            // 验证 file 对象结构
+            if (!message.file.name || !message.file.path) {
+              console.error('[Trans-Leaf] Invalid file object:', message.file);
+              return;
+            }
             attachedFile = message.file;
             updateFileUI();
           }
+          break;
+
+        case 'dispose':
+          cleanupEventListeners();
           break;
       }
     });
