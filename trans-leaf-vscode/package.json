@@ -2,7 +2,7 @@
   "name": "trans-leaf",
   "displayName": "Trans-Leaf",
   "description": "AI \u9a71\u52a8\u7684\u4e13\u4e1a\u7ffb\u8bd1\u5de5\u5177\uff0c\u4fdd\u7559\u539f\u6587\u683c\u5f0f",
-  "version": "0.1.0",
+  "version": "0.1.2-beta",
   "publisher": "trans-leaf",
   "engines": {
     "vscode": "^1.85.0"

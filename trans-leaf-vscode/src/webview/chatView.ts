@@ -194,7 +194,7 @@ export class ChatView {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:;">
   <style>
     * {
       box-sizing: border-box;
@@ -684,9 +684,9 @@ export class ChatView {
     let attachedFile = null;
     let alwaysWriteFile = false;
     const MAX_HISTORY = 15;
-    let inputHistory: string[] = [];
+    let inputHistory = [];
     let historyIndex = -1;
-    let currentInput = '';  // 配置：是否自动写入文件
+    let hasTyped = false;
 
     // 文件选择器
     const fileAttach = document.getElementById('fileAttach');
@@ -750,25 +750,22 @@ export class ChatView {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         send();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' && !hasTyped && inputHistory.length > 0) {
         e.preventDefault();
-        if (inputHistory.length > 0) {
-          if (historyIndex === -1) {
-            currentInput = chatInput.value;
-            historyIndex = 0;
-          } else if (historyIndex < inputHistory.length - 1) {
-            historyIndex++;
-          }
-          chatInput.value = inputHistory[historyIndex];
+        if (historyIndex === -1) {
+          historyIndex = 0;
+        } else if (historyIndex < inputHistory.length - 1) {
+          historyIndex++;
         }
-      } else if (e.key === 'ArrowDown') {
+        chatInput.value = inputHistory[historyIndex];
+      } else if (e.key === 'ArrowDown' && !hasTyped && historyIndex >= 0) {
         e.preventDefault();
         if (historyIndex > 0) {
           historyIndex--;
           chatInput.value = inputHistory[historyIndex];
-        } else if (historyIndex === 0) {
+        } else {
           historyIndex = -1;
-          chatInput.value = currentInput;
+          chatInput.value = '';
         }
       }
     });
@@ -777,9 +774,15 @@ export class ChatView {
     chatInput.addEventListener('input', () => {
       chatInput.style.height = 'auto';
       chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+      if (chatInput.value) {
+        hasTyped = true;
+      } else {
+        hasTyped = false;
+        historyIndex = -1;
+      }
     });
 
-    const send = function() {
+    function send() {
       const text = chatInput.value.trim();
       if (!text || isTranslating) return;
 
@@ -791,7 +794,7 @@ export class ChatView {
         }
       }
       historyIndex = -1;
-      currentInput = '';
+      hasTyped = false;
 
       // 隐藏欢迎信息
       if (welcomeEl) welcomeEl.style.display = 'none';

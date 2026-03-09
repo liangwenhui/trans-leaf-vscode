@@ -11,7 +11,7 @@ import type {
 } from './types.js';
 
 const MAX_ITERATIONS = 20;
-const DANGEROUS_TOOLS = new Set(['writeFile', 'editFile', 'runCommand']);
+const DANGEROUS_TOOLS = new Set<string>();  // 仅删除类操作需要确认，当前无删除工具
 
 /**
  * Agent 循环类 - 处理对话和工具调用
@@ -157,10 +157,13 @@ ${text}`;
     const systemMessage: Message = {
       role: 'system',
       content: `你是 Trans-Leaf，一个 VS Code 中的 AI 翻译助手。
+你是一位专业翻译，但不要擅自翻译，等待用户的指示。
 你可以使用工具帮助用户完成翻译和代码相关任务。
 当前工作区根目录: ${workspaceRoot}
 
 规则：
+- 不要擅自帮用户翻译，等待用户的明确指示
+- 翻译时严格保留原文的所有格式，包括换行、缩进、标记符号，只输出译文
 - 对于翻译任务，优先使用 translateText 工具
 - 修改文件前先用 readFile 了解内容
 - 保持回答简洁，用中文交流（除非用户用英文）`
