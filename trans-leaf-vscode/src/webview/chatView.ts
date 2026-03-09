@@ -122,6 +122,11 @@ export class ChatView {
       case 'openSettings':
         await vscode.commands.executeCommand('workbench.action.openSettings', 'transLeaf');
         break;
+      case 'reloadConfig':
+        this._agentReady = this.initAgentLoop();
+        await this._agentReady;
+        this._panel.webview.postMessage({ type: 'config-reloaded' });
+        break;
     }
   }
 
@@ -286,40 +291,77 @@ export class ChatView {
 
     /* ===== 输入栏 ===== */
     .input-bar {
-      border-top: 1px solid var(--vscode-widget-border);
-      padding: 10px 12px;
+      padding: 8px 12px 12px;
       background: var(--vscode-sideBar-background, var(--vscode-editor-background));
     }
-    .input-toolbar {
+    .input-card {
+      border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+      border-radius: 12px;
+      background: var(--vscode-input-background);
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .input-card:focus-within {
+      border-color: var(--vscode-focusBorder);
+    }
+    textarea#chatInput {
+      width: 100%;
+      min-height: 40px;
+      max-height: 120px;
+      padding: 12px 14px 0;
+      border: none;
+      background: transparent;
+      color: var(--vscode-input-foreground);
+      font-family: inherit;
+      font-size: 13px;
+      resize: none;
+      outline: none;
+      line-height: 1.5;
+      overflow-y: auto;
+    }
+    textarea#chatInput::placeholder {
+      color: var(--vscode-input-placeholderForeground);
+    }
+    .input-bottom {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 6px;
+      padding: 4px 6px 6px;
     }
-    .target-toggle {
+    .input-actions {
       display: flex;
       align-items: center;
       gap: 2px;
-      background: var(--vscode-input-background);
-      border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
-      border-radius: 6px;
-      overflow: hidden;
     }
-    .target-btn {
-      padding: 3px 8px;
+    .lang-select {
+      padding: 3px 4px 3px 8px;
       border: none;
       background: transparent;
       color: var(--vscode-descriptionForeground);
       font-size: 11px;
       font-family: inherit;
       cursor: pointer;
-      transition: all 0.15s;
+      border-radius: 4px;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%23888' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 4px center;
+      padding-right: 16px;
     }
-    .target-btn.active {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
+    .lang-select:hover {
+      background-color: var(--vscode-list-hoverBackground);
+      color: var(--vscode-foreground);
     }
-    .settings-btn {
+    .lang-select:focus {
+      border-color: var(--vscode-focusBorder);
+    }
+    .lang-select option {
+      background: var(--vscode-dropdown-background, var(--vscode-editor-background));
+      color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+    }
+    .icon-btn {
       padding: 3px 6px;
       border: none;
       background: transparent;
@@ -329,62 +371,36 @@ export class ChatView {
       border-radius: 4px;
       font-family: inherit;
     }
-    .settings-btn:hover {
+    .icon-btn:hover {
       background: var(--vscode-list-hoverBackground);
       color: var(--vscode-foreground);
     }
-    .input-row {
-      display: flex;
-      align-items: flex-end;
-      gap: 6px;
-    }
-    .input-wrapper {
-      flex: 1;
-      position: relative;
-    }
-    textarea#chatInput {
-      width: 100%;
-      min-height: 36px;
-      max-height: 120px;
-      padding: 8px 10px;
-      border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
-      border-radius: 8px;
-      background-color: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
-      font-family: inherit;
-      font-size: 13px;
-      resize: none;
-      outline: none;
-      line-height: 1.4;
-      overflow-y: auto;
-    }
-    textarea#chatInput:focus {
-      border-color: var(--vscode-focusBorder);
-    }
-    textarea#chatInput::placeholder {
-      color: var(--vscode-input-placeholderForeground);
-    }
     .send-btn {
-      width: 32px;
-      height: 36px;
+      width: 28px;
+      height: 28px;
       border: none;
-      border-radius: 8px;
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-      font-size: 16px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: opacity 0.15s;
+      transition: all 0.15s;
       flex-shrink: 0;
     }
     .send-btn:hover {
-      opacity: 0.85;
+      background: var(--vscode-list-hoverBackground);
+      color: var(--vscode-foreground);
     }
     .send-btn:disabled {
-      opacity: 0.4;
+      opacity: 0.3;
       cursor: default;
+      background: transparent;
+    }
+    .send-btn svg {
+      width: 16px;
+      height: 16px;
     }
 
     /* 工具调用面板 */
@@ -504,18 +520,20 @@ export class ChatView {
 
     <!-- 底部输入栏 -->
     <div class="input-bar">
-      <div class="input-toolbar">
-        <div class="target-toggle">
-          <button class="target-btn active" data-lang="zh-CN" id="toggleZh">中文</button>
-          <button class="target-btn" data-lang="en" id="toggleEn">English</button>
+      <div class="input-card">
+        <textarea id="chatInput" rows="1" placeholder="输入消息，如：帮我翻译这句话..."></textarea>
+        <div class="input-bottom">
+          <div class="input-actions">
+            <select class="lang-select" id="langSelect" title="目标语言">
+              <option value="auto">Auto</option>
+              <option value="zh-CN">中文</option>
+              <option value="en">English</option>
+            </select>
+            <button class="icon-btn" id="reloadConfig" title="刷新配置">↻</button>
+            <button class="icon-btn" id="openSettings" title="设置">⚙</button>
+          </div>
+          <button class="send-btn" id="sendBtn" title="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg></button>
         </div>
-        <button class="settings-btn" id="openSettings" title="设置">⚙</button>
-      </div>
-      <div class="input-row">
-        <div class="input-wrapper">
-          <textarea id="chatInput" rows="1" placeholder="输入消息，如：帮我翻译这句话..."></textarea>
-        </div>
-        <button class="send-btn" id="sendBtn" title="发送">➤</button>
       </div>
     </div>
   </div>
@@ -531,20 +549,14 @@ export class ChatView {
     const welcomeEl   = document.getElementById('welcome');
     const quickChips  = document.getElementById('quickChips');
 
-    let targetLang = 'zh-CN';
+    let targetLang = 'auto';
     let isTranslating = false;
     let typingEl = null; // 当前的翻译中气泡
 
-    // ===== 目标语言切换 =====
-    document.getElementById('toggleZh').addEventListener('click', () => setTarget('zh-CN'));
-    document.getElementById('toggleEn').addEventListener('click', () => setTarget('en'));
-
-    function setTarget(lang) {
-      targetLang = lang;
-      document.getElementById('toggleZh').classList.toggle('active', lang === 'zh-CN');
-      document.getElementById('toggleEn').classList.toggle('active', lang === 'en');
-      chatInput.placeholder = '输入消息，如：帮我翻译这句话...';
-    }
+    // ===== 目标语言下拉 =====
+    document.getElementById('langSelect').addEventListener('change', (e) => {
+      targetLang = e.target.value;
+    });
 
     // ===== 快捷操作 =====
     document.getElementById('chipSelZh').addEventListener('click', () => {
@@ -563,6 +575,12 @@ export class ChatView {
     // ===== 设置 =====
     document.getElementById('openSettings').addEventListener('click', () => {
       vscode.postMessage({ type: 'openSettings' });
+    });
+
+    // ===== 刷新配置 =====
+    document.getElementById('reloadConfig').addEventListener('click', () => {
+      vscode.postMessage({ type: 'reloadConfig' });
+      addMessage('assistant', '正在刷新配置...');
     });
 
     // ===== 发送消息 =====
@@ -763,6 +781,10 @@ export class ChatView {
           isTranslating = false;
           sendBtn.disabled = false;
           chatInput.focus();
+          break;
+
+        case 'config-reloaded':
+          addMessage('assistant', '配置已刷新');
           break;
       }
     });
