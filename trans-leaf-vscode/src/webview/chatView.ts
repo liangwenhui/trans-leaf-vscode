@@ -130,8 +130,8 @@ export class ChatView {
       case 'translateSelection':
         await vscode.commands.executeCommand(
           message.targetLang === 'zh-CN'
-            ? 'transLeaf.translateSelectionToZh'
-            : 'transLeaf.translateSelectionToEn'
+            ? 'transLeaf.translateAndReviewToZh'
+            : 'transLeaf.translateAndReviewToEn'
         );
         break;
       case 'translateFile':
