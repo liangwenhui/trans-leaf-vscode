@@ -5,6 +5,7 @@ import { getConfig, openSettings } from '../utils/config.js';
 import { buildSimpleSelectionPrompt } from '../engine/promptBuilder.js';
 import { acquireLock, releaseLock } from '../utils/lock.js';
 import { TranslationReviewPanel } from '../webview/reviewPanel.js';
+import { getTMManager } from '../tm/manager.js';
 
 /**
  * 翻译选中文本并打开审阅面板
@@ -123,7 +124,7 @@ export async function translateAndReview(targetLang?: 'zh-CN' | 'en'): Promise<v
           translatedText: result.text,
           sourceLang: finalSourceLang,
           targetLang,
-          onWrite: async (text: string, _saveToTM: boolean) => {
+          onWrite: async (text: string, saveToTM: boolean) => {
             // 写入文件：检查 editor 是否仍然有效
             const targetEditor = vscode.window.visibleTextEditors.find(
               e => e.document.uri.toString() === originalUri.toString()
@@ -152,10 +153,16 @@ export async function translateAndReview(targetLang?: 'zh-CN' | 'en'): Promise<v
 
             vscode.window.setStatusBarMessage('🍃 Trans-Leaf: 译文已写入文件', 3000);
 
-            // saveToTM 预留 — 后续接入 MemoryManager
-            // if (_saveToTM) {
-            //   memoryManager.saveTM({ source: selectedText, target: text, ... });
-            // }
+            // 保存到 TM
+            if (saveToTM) {
+              const tmManager = getTMManager();
+              await tmManager.save([{
+                sourceText: selectedText,
+                targetText: text,
+                sourceLang: finalSourceLang,
+                targetLang,
+              }]);
+            }
           }
         });
       }
