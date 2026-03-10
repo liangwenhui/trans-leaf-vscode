@@ -1,7 +1,7 @@
 {
   "name": "trans-leaf",
   "displayName": "Trans-Leaf",
-  "description": "AI \u9a71\u52a8\u7684\u4e13\u4e1a\u7ffb\u8bd1\u5de5\u5177\uff0c\u4fdd\u7559\u539f\u6587\u683c\u5f0f",
+  "description": "AI 驱动的专业翻译工具，保留原文格式",
   "version": "0.1.2",
   "publisher": "trans-leaf",
   "engines": {
@@ -17,16 +17,16 @@
   "contributes": {
     "commands": [
       {
-        "command": "transLeaf.translateSelectionToZh",
-        "title": "Trans-Leaf: \u7ffb\u8bd1\u9009\u4e2d\u6587\u672c\u4e3a\u4e2d\u6587"
+        "command": "transLeaf.translateAndReviewToZh",
+        "title": "Trans-Leaf: 翻译并审阅 → 中文"
       },
       {
-        "command": "transLeaf.translateSelectionToEn",
-        "title": "Trans-Leaf: Translate Selection to English"
+        "command": "transLeaf.translateAndReviewToEn",
+        "title": "Trans-Leaf: Translate & Review → English"
       },
       {
         "command": "transLeaf.translateFileToZh",
-        "title": "Trans-Leaf: \u7ffb\u8bd1\u5168\u6587\u4e3a\u4e2d\u6587"
+        "title": "Trans-Leaf: 翻译全文为中文"
       },
       {
         "command": "transLeaf.translateFileToEn",
@@ -34,11 +34,11 @@
       },
       {
         "command": "transLeaf.showMenu",
-        "title": "Trans-Leaf: \u663e\u793a\u83dc\u5355"
+        "title": "Trans-Leaf: 显示菜单"
       },
       {
         "command": "transLeaf.writeTranslation",
-        "title": "Trans-Leaf: \u5199\u5165\u7ffb\u8bd1\u7ed3\u679c"
+        "title": "Trans-Leaf: 写入翻译结果"
       }
     ],
     "menus": {
@@ -51,19 +51,19 @@
       ],
       "transLeaf.translateSubMenu": [
         {
-          "command": "transLeaf.translateSelectionToZh",
-          "group": "1_lang@1"
+          "command": "transLeaf.translateAndReviewToZh",
+          "group": "1_review@1"
         },
         {
-          "command": "transLeaf.translateSelectionToEn",
-          "group": "1_lang@2"
+          "command": "transLeaf.translateAndReviewToEn",
+          "group": "1_review@2"
         }
       ]
     },
     "submenus": [
       {
         "id": "transLeaf.translateSubMenu",
-        "label": "Trans-Leaf \u7ffb\u8bd1"
+        "label": "Trans-Leaf 翻译"
       }
     ],
     "viewsContainers": {
@@ -87,7 +87,7 @@
     },
     "keybindings": [
       {
-        "command": "transLeaf.translateSelectionToZh",
+        "command": "transLeaf.translateAndReviewToZh",
         "key": "ctrl+alt+t",
         "when": "editorHasSelection"
       },
@@ -109,34 +109,34 @@
             "openai",
             "deepseek"
           ],
-          "description": "\u7ffb\u8bd1\u670d\u52a1\u63d0\u4f9b\u5546"
+          "description": "翻译服务提供商"
         },
         "transLeaf.apiKey": {
           "type": "string",
           "default": "",
-          "description": "AI API Key\uff08\u5728\u8bbe\u7f6e\u4e2d\u8f93\u5165\uff0c\u4e0d\u8981\u5199\u5165\u4ee3\u7801\u4ed3\u5e93\uff09"
+          "description": "AI API Key（在设置中输入，不要写入代码仓库）"
         },
         "transLeaf.model": {
           "type": "string",
           "default": "",
-          "description": "AI \u6a21\u578b\u540d\u79f0\uff08\u7559\u7a7a\u5219\u4f7f\u7528\u5404\u670d\u52a1\u5546\u9ed8\u8ba4\u6a21\u578b\uff09"
+          "description": "AI 模型名称（留空则使用各服务商默认模型）"
         },
         "transLeaf.concurrency": {
           "type": "number",
           "default": 3,
           "minimum": 1,
           "maximum": 10,
-          "description": "\u5e76\u53d1\u7ffb\u8bd1\u6bb5\u6570\uff08\u5206\u6bb5\u7ffb\u8bd1\u65f6\u540c\u65f6\u5904\u7406\u7684\u6bb5\u6570\uff09"
+          "description": "并发翻译段数（分段翻译时同时处理的段数）"
         },
         "transLeaf.apiBaseUrl": {
           "type": "string",
           "default": "",
-          "description": "\u81ea\u5b9a\u4e49 API \u5730\u5740\uff08\u7528\u4e8e\u4ee3\u7406\u6216\u517c\u5bb9\u670d\u52a1\uff09"
+          "description": "自定义 API 地址（用于代理或兼容服务）"
         },
         "transLeaf.alwaysWriteFile": {
           "type": "boolean",
           "default": false,
-          "description": "\u7ffb\u8bd1\u5b8c\u6210\u540e\u81ea\u52a8\u5199\u5165\u6587\u4ef6\uff0c\u4e0d\u518d\u8be2\u95ee"
+          "description": "翻译完成后自动写入文件，不再询问"
         }
       }
     }
