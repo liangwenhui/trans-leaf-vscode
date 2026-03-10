@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { translateAndReview } from './commands/translateAndReview.js';
+import { translateFileReview } from './commands/translateFileReview.js';
 import { translateFile } from './commands/translateFile.js';
 import { openSettings } from './utils/config.js';
 import { ChatView } from './webview/chatView.js';
@@ -55,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
       const options = [
         { label: '$(file-text) Translate File to Chinese', value: 'translateFileToZh' },
         { label: '$(file-text) Translate File to English', value: 'translateFileToEn' },
+        { label: '$(table) 分句翻译审阅', value: 'translateFileReview' },
         { label: '$(gear) Settings', value: 'settings' }
       ];
 
@@ -66,13 +68,15 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.commands.executeCommand('transLeaf.translateFileToZh');
       } else if (choice?.value === 'translateFileToEn') {
         await vscode.commands.executeCommand('transLeaf.translateFileToEn');
+      } else if (choice?.value === 'translateFileReview') {
+        await vscode.commands.executeCommand('transLeaf.translateFileReview');
       } else if (choice?.value === 'settings') {
         openSettings();
       }
     }
   );
 
-  // ★ CHANGED: Register translate & review to Chinese (O1, replaces translateSelectionToZh)
+  // Register translate & review to Chinese (O1)
   const translateAndReviewToZhCommand = vscode.commands.registerCommand(
     'transLeaf.translateAndReviewToZh',
     async () => {
@@ -85,7 +89,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // ★ CHANGED: Register translate & review to English (O1, replaces translateSelectionToEn)
+  // Register translate & review to English (O1)
   const translateAndReviewToEnCommand = vscode.commands.registerCommand(
     'transLeaf.translateAndReviewToEn',
     async () => {
@@ -124,6 +128,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  // ★ NEW: Register file review command (O2)
+  const translateFileReviewCommand = vscode.commands.registerCommand(
+    'transLeaf.translateFileReview',
+    async () => {
+      statusBarItem.text = '$(sync~spin) 分句审阅...';
+      try {
+        await translateFileReview();
+      } finally {
+        statusBarItem.text = '$(leaf) Trans-Leaf';
+      }
+    }
+  );
+
   // Register write translation result command
   const writeTranslationCommand = vscode.commands.registerCommand(
     'transLeaf.writeTranslation',
@@ -138,7 +155,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // ★ CHANGED: subscriptions updated
   context.subscriptions.push(
     statusBarItem,
     showMenuCommand,
@@ -146,6 +162,7 @@ export function activate(context: vscode.ExtensionContext) {
     translateAndReviewToEnCommand,
     translateFileToZhCommand,
     translateFileToEnCommand,
+    translateFileReviewCommand,
     chatViewProvider,
     activeEditorDisposable,
     writeTranslationCommand
