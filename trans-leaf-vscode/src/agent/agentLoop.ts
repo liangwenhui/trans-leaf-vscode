@@ -11,7 +11,7 @@ import type {
 } from './types.js';
 
 const MAX_ITERATIONS = 20;
-const DANGEROUS_TOOLS = new Set(['writeFile', 'editFile', 'runCommand']);
+const DANGEROUS_TOOLS = new Set<string>();  // 仅删除类操作需要确认，当前无删除工具
 
 /**
  * Agent 循环类 - 处理对话和工具调用
@@ -20,6 +20,7 @@ export class AgentLoop {
   private messages: Message[] = [];
   private llmClient: LLMClient;
   private toolMap: Map<string, Tool>;
+  alwaysWriteFile: boolean = false;  // 是否自动写入文件，跳过确认
 
   constructor(
     config: LLMConfig,
@@ -36,9 +37,32 @@ export class AgentLoop {
   /**
    * 处理用户消息
    */
-  async handleUserMessage(text: string): Promise<void> {
+  async handleUserMessage(text: string, attachedFile?: { path: string; name: string }): Promise<void> {
+    let content = text;
+    
+    // 如果有附件文件，读取文件内容作为上下文
+    if (attachedFile) {
+      try {
+        const fs = await import('fs/promises');
+        const fileContent = await fs.readFile(attachedFile.path, 'utf-8');
+        content = `【文件: ${attachedFile.name}】
+\`\`\`${attachedFile.name.split('.').pop()}\`\`\`
+${fileContent}
+\`\`\`
+
+---
+
+${text}`;
+      } catch (e) {
+        console.error('[Trans-Leaf] 读取文件失败:', e);
+        content = `【附件文件: ${attachedFile.name} (读取失败)】
+
+${text}`;
+      }
+    }
+    
     // 添加用户消息
-    this.messages.push({ role: 'user', content: text });
+    this.messages.push({ role: 'user', content });
 
     // 开始循环
     await this.runLoop();
@@ -133,10 +157,13 @@ export class AgentLoop {
     const systemMessage: Message = {
       role: 'system',
       content: `你是 Trans-Leaf，一个 VS Code 中的 AI 翻译助手。
+你是一位专业翻译，但不要擅自翻译，等待用户的指示。
 你可以使用工具帮助用户完成翻译和代码相关任务。
 当前工作区根目录: ${workspaceRoot}
 
 规则：
+- 不要擅自帮用户翻译，等待用户的明确指示
+- 翻译时严格保留原文的所有格式，包括换行、缩进、标记符号，只输出译文
 - 对于翻译任务，优先使用 translateText 工具
 - 修改文件前先用 readFile 了解内容
 - 保持回答简洁，用中文交流（除非用户用英文）`
@@ -176,8 +203,8 @@ export class AgentLoop {
         continue;
       }
 
-      // 危险工具需要用户确认
-      if (DANGEROUS_TOOLS.has(call.name)) {
+      // 危险工具需要用户确认（除非设置了 alwaysWriteFile）
+      if (DANGEROUS_TOOLS.has(call.name) && !this.alwaysWriteFile) {
         const confirmed = await this.callbacks.onConfirmRequest(call.name, call.arguments);
         if (!confirmed) {
           const cancelMsg = '用户拒绝了此操作';
