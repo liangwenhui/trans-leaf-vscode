@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { createTranslator } from '../translator/index.js';
 import { buildSimpleSelectionPrompt } from '../engine/promptBuilder.js';
 import { getConfig } from '../utils/config.js';
+import { getTMManager } from '../tm/manager.js';
 import type { Sentence } from '../commands/translateFileReview.js';
 
 interface FileReviewOptions {
@@ -326,7 +327,7 @@ export class FileReviewPanel {
     }
   }
 
-  private async saveAsFile(_saveToTM: boolean): Promise<void> {
+  private async saveAsFile(saveToTM: boolean): Promise<void> {
     const untranslated = this.sentences.filter(s => s.translatable && !s.target);
     if (untranslated.length > 0) {
       const translatable = this.sentences.filter(s => s.translatable);
@@ -389,6 +390,22 @@ export class FileReviewPanel {
 
     await vscode.workspace.fs.writeFile(uri, Buffer.from(resultText, 'utf-8'));
     vscode.window.showInformationMessage(`🍃 译文已保存：${uri.fsPath}`);
+
+    // 保存到 TM
+    if (saveToTM) {
+      const tmManager = getTMManager();
+      const entries = this.sentences
+        .filter(s => s.translatable && s.target)
+        .map(s => ({
+          sourceText: s.source,
+          targetText: s.target,
+          sourceLang: this.options.sourceLang,
+          targetLang: this.options.targetLang,
+        }));
+      if (entries.length > 0) {
+        await tmManager.save(entries);
+      }
+    }
   }
 
   private _getHtml(): string {
