@@ -51,6 +51,10 @@
           "submenu": "transLeaf.translateSubMenu",
           "when": "editorHasSelection",
           "group": "1_modification@1"
+        },
+        {
+          "command": "transLeaf.translateFileReview",
+          "group": "1_modification@2"
         }
       ],
       "transLeaf.translateSubMenu": [
