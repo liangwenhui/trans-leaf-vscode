@@ -39,6 +39,10 @@
       {
         "command": "transLeaf.writeTranslation",
         "title": "Trans-Leaf: 写入翻译结果"
+      },
+      {
+        "command": "transLeaf.translateFileReview",
+        "title": "Trans-Leaf: 分句翻译审阅"
       }
     ],
     "menus": {
@@ -94,6 +98,11 @@
       {
         "command": "transLeaf.translateFileToZh",
         "key": "ctrl+alt+shift+t",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "transLeaf.translateFileReview",
+        "key": "ctrl+alt+shift+r",
         "when": "editorTextFocus"
       }
     ],
