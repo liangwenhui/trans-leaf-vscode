@@ -528,6 +528,10 @@ export class FileReviewPanel {
     function render() {
       tbody.innerHTML = '';
       for (const s of sentences) {
+        // 跳过空行，不在审阅面板显示
+        if (!s.source) {
+          continue;
+        }
         const tr = document.createElement('tr');
         tr.id = 'row-' + s.index;
         tr.className = s.translatable ? s.status : 'untranslatable';
