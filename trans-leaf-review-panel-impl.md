@@ -2113,3 +2113,253 @@ npm run lint
 | **删除** | `src/commands/translateSelection.ts` | 1 |
 | **新增** | `src/commands/translateFileReview.ts` | 2 |
 | **新增** | `src/webview/fileReviewPanel.ts` | 2 |
+
+---
+
+## 附录：潜在改进点
+
+> 以下建议基于 Code Review 的分析，可考虑在后续迭代中实施
+
+### A.1 长文件性能优化
+
+**问题**：O2 表格视图渲染 500+ 句可能导致性能问题。
+
+**建议方案 1：虚拟滚动**
+
+```typescript
+class VirtualScroller {
+  private rowHeight = 50; // 每句高度（像素）
+  private viewportHeight = 600; // 可视区域高度
+  private buffer = 5; // 缓冲区行数
+
+  getVisibleRows(scrollTop: number, totalRows: number): number[] {
+    const startRow = Math.floor(scrollTop / this.rowHeight) - this.buffer;
+    const endRow = startRow + Math.ceil(this.viewportHeight / this.rowHeight) + this.buffer * 2;
+    return [
+      Math.max(0, startRow),
+      Math.min(totalRows - 1, endRow)
+    ];
+  }
+
+  render(sentences: Sentence[], scrollTop: number): HTMLElement {
+    const [start, end] = this.getVisibleRows(scrollTop, sentences.length);
+    const visibleSentences = sentences.slice(start, end);
+    // 只渲染可见区域的句子
+  }
+}
+```
+
+**建议方案 2：分页加载**
+
+```typescript
+const PAGE_SIZE = 50; // 每页显示 50 句
+
+interface Pagination {
+  currentPage: number;
+  totalPages: number;
+  sentences: Sentence[];
+}
+
+function loadPage(sentences: Sentence[], page: number): Pagination {
+  const totalPages = Math.ceil(sentences.length / PAGE_SIZE);
+  const start = page * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, sentences.length);
+  return {
+    currentPage: page,
+    totalPages,
+    sentences: sentences.slice(start, end)
+  };
+}
+```
+
+---
+
+### A.2 引号内标点误断句
+
+**问题**：`"He said 'Hello!'"` 可能误断句。
+
+**建议方案**：添加引号状态跟踪
+
+```typescript
+function splitByPunctuation(text: string): string[] {
+  // 现有代码...
+
+  const openQuotes = (text.match(/["']/g) || []).length;
+  const closeQuotes = (text.match(/["']/g) || []).length;
+
+  // 判断是否在引号内
+  function isInsideQuotes(index: number): boolean {
+    const before = text.substring(0, index);
+    const open = (before.match(/["']/g) || []).length;
+    const close = (before.match(/["']/g) || []).length;
+    return open % 2 !== 0; // 奇数个引号 = 引号内
+  }
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    // 如果在引号内，跳过断句判断
+    if (isInsideQuotes(i)) {
+      continue;
+    }
+
+    // 现有断句逻辑...
+  }
+}
+```
+
+---
+
+### A.3 导出逻辑优化
+
+**问题**：未翻译句用原文占位可能不符合用户期望。
+
+**建议方案**：导出前强制检查
+
+```typescript
+async function saveAsFile(sentences: Sentence[], saveToTM: boolean): Promise<void> {
+  const untranslated = sentences.filter(s => s.translatable && !s.target);
+  
+  if (untranslated.length > 0) {
+    const translatable = sentences.filter(s => s.translatable);
+    
+    const choice = await vscode.window.showWarningMessage(
+      \`有 \${untranslated.length}/\${translatable.length} 句未翻译，未翻译的句子将保留原文。\`,
+      '导出全部（未翻译用原文占位）',
+      '仅导出已翻译',
+      '取消'
+    );
+
+    if (choice === '取消') {
+      return;
+    }
+
+    if (choice === '仅导出已翻译') {
+      const translatedOnly = sentences.filter(s => 
+        !s.translatable || (s.translatable && s.target)
+      );
+      return exportTranslatedOnly(translatedOnly);
+    }
+  }
+
+  // 导出全部
+  return exportAll(sentences);
+}
+```
+
+---
+
+### A.4 术语表支持（高级功能）
+
+**需求**：用户可能希望特定术语保持一致翻译。
+
+**建议方案**：
+
+```typescript
+interface GlossaryEntry {
+  source: string;  // 原术语
+  target: string;  // 译术语
+  context?: string; // 使用场景
+}
+
+// 配置项
+interface GlossaryConfig {
+  enabled: boolean;
+  entries: GlossaryEntry[];
+}
+
+function buildPromptWithGlossary(
+  sentence: string,
+  context: TranslationContext,
+  glossary: GlossaryEntry[]
+): string {
+  const glossarySection = glossary.length > 0
+    ? \`\\n术语表：\\n\${glossary.map(e => \`- \${e.source} → \${e.target}\`).join('\\n')}\\n\`
+    : '';
+
+  const contextSection = buildContextString(context);
+
+  return \`\${glossarySection}\${contextSection}\\n请翻译以下句子：\\n\${sentence}\`;
+}
+```
+
+---
+
+### A.5 WebView 消息通信抽象层
+
+**问题**：O1 和 O2 独立实现消息通信，未来添加 O3 会重复代码。
+
+**建议方案**：抽象通信通道基类
+
+```typescript
+// 通用消息接口
+interface WebViewMessage<T = any> {
+  type: string;
+  payload: T;
+  id: string; // 用于请求-响应匹配
+  timestamp?: number;
+}
+
+// 通信通道基类
+abstract class WebViewChannel {
+  private panel: vscode.WebviewPanel;
+  private pendingRequests: Map<string, PromiseResolver>;
+  private messageHandlers: Map<string, Function[]>;
+
+  send<T, R>(type: string, payload: T): Promise<R> {
+    const id = generateId();
+    this.panel.webview.postMessage({ type, payload, id });
+
+    return new Promise((resolve) => {
+      this.pendingRequests.set(id, { resolve });
+    });
+  }
+
+  on<T>(type: string, handler: (payload: T) => void | Promise<void>): void {
+    if (!this.messageHandlers.has(type)) {
+      this.messageHandlers.set(type, []);
+    }
+    this.messageHandlers.get(type)!.push(handler);
+  }
+
+  handleMessage(msg: WebViewMessage): void {
+    if (this.messageHandlers.has(msg.type)) {
+      const handlers = this.messageHandlers.get(msg.type)!;
+      handlers.forEach(h => h(msg.payload));
+    }
+
+    // 请求-响应匹配
+    if (this.pendingRequests.has(msg.id)) {
+      const { resolve } = this.pendingRequests.get(msg.id)!;
+      this.pendingRequests.delete(msg.id);
+      resolve(msg.payload);
+    }
+  }
+}
+
+// 使用示例
+class ReviewPanel extends WebViewChannel {
+  show(options: ReviewPanelOptions) {
+    // ...
+    this.on('write-to-file', async (data) => {
+      await options.onWrite(data.text, data.saveToTM);
+    });
+  }
+}
+```
+
+---
+
+**优先级建议**：
+
+| 改进点 | 优先级 | 复杂度 |
+|--------|--------|--------|
+| A.3 导出逻辑优化 | 高 | 低 |
+| A.2 引号内标点处理 | 中 | 中 |
+| A.1 虚拟滚动 | 中 | 高 |
+| A.4 术语表支持 | 低 | 中 |
+| A.5 消息通信抽象 | 低 | 高 |
+
+---
+
+_附录添加时间: 2026-03-10_
