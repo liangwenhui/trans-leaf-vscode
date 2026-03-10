@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { translateSelection } from './commands/translateSelection.js';
+import { translateAndReview } from './commands/translateAndReview.js';
 import { translateFile } from './commands/translateFile.js';
 import { openSettings } from './utils/config.js';
 import { ChatView } from './webview/chatView.js';
@@ -18,7 +18,6 @@ export function activate(context: vscode.ExtensionContext) {
     {
       resolveWebviewView: (webviewView) => {
         chatView = new ChatView(context.extensionUri, webviewView);
-        // Send current active file on initialization
         const activeUri = vscode.window.activeTextEditor?.document.uri;
         if (activeUri) {
           setTimeout(() => chatView?.updateActiveFile(activeUri), 500);
@@ -32,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Listen for active editor changes, update ChatView's current file in real-time
+  // Listen for active editor changes
   const activeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
     if (editor && chatView) {
       chatView.updateActiveFile(editor.document.uri);
@@ -73,34 +72,28 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Register translate selected text to Chinese command
-  const translateSelectionToZhCommand = vscode.commands.registerCommand(
-    'transLeaf.translateSelectionToZh',
+  // ★ CHANGED: Register translate & review to Chinese (O1, replaces translateSelectionToZh)
+  const translateAndReviewToZhCommand = vscode.commands.registerCommand(
+    'transLeaf.translateAndReviewToZh',
     async () => {
       statusBarItem.text = '$(sync~spin) Translating...';
       try {
-        await translateSelection('zh-CN');
+        await translateAndReview('zh-CN');
       } finally {
         statusBarItem.text = '$(leaf) Trans-Leaf';
-        setTimeout(() => {
-          statusBarItem.text = '$(leaf) Trans-Leaf';
-        }, 3000);
       }
     }
   );
 
-  // Register translate selected text to English command
-  const translateSelectionToEnCommand = vscode.commands.registerCommand(
-    'transLeaf.translateSelectionToEn',
+  // ★ CHANGED: Register translate & review to English (O1, replaces translateSelectionToEn)
+  const translateAndReviewToEnCommand = vscode.commands.registerCommand(
+    'transLeaf.translateAndReviewToEn',
     async () => {
       statusBarItem.text = '$(sync~spin) Translating...';
       try {
-        await translateSelection('en');
+        await translateAndReview('en');
       } finally {
         statusBarItem.text = '$(leaf) Trans-Leaf';
-        setTimeout(() => {
-          statusBarItem.text = '$(leaf) Trans-Leaf';
-        }, 3000);
       }
     }
   );
@@ -114,9 +107,6 @@ export function activate(context: vscode.ExtensionContext) {
         await translateFile('zh-CN');
       } finally {
         statusBarItem.text = '$(leaf) Trans-Leaf';
-        setTimeout(() => {
-          statusBarItem.text = '$(leaf) Trans-Leaf';
-        }, 3000);
       }
     }
   );
@@ -130,9 +120,6 @@ export function activate(context: vscode.ExtensionContext) {
         await translateFile('en');
       } finally {
         statusBarItem.text = '$(leaf) Trans-Leaf';
-        setTimeout(() => {
-          statusBarItem.text = '$(leaf) Trans-Leaf';
-        }, 3000);
       }
     }
   );
@@ -151,12 +138,12 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // Add to subscriptions list to ensure cleanup on plugin deactivation
+  // ★ CHANGED: subscriptions updated
   context.subscriptions.push(
     statusBarItem,
     showMenuCommand,
-    translateSelectionToZhCommand,
-    translateSelectionToEnCommand,
+    translateAndReviewToZhCommand,
+    translateAndReviewToEnCommand,
     translateFileToZhCommand,
     translateFileToEnCommand,
     chatViewProvider,
