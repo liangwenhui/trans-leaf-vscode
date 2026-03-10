@@ -5,12 +5,12 @@ import { openSettings } from './utils/config.js';
 import { ChatView } from './webview/chatView.js';
 
 /**
- * 插件激活函数
+ * Plugin activation function
  */
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Trans-Leaf 插件已激活');
+  console.log('Trans-Leaf plugin activated');
 
-  // 注册聊天侧边栏视图
+  // Register chat sidebar view
   let chatView: ChatView | undefined;
 
   const chatViewProvider = vscode.window.registerWebviewViewProvider(
@@ -18,6 +18,11 @@ export function activate(context: vscode.ExtensionContext) {
     {
       resolveWebviewView: (webviewView) => {
         chatView = new ChatView(context.extensionUri, webviewView);
+        // Send current active file on initialization
+        const activeUri = vscode.window.activeTextEditor?.document.uri;
+        if (activeUri) {
+          setTimeout(() => chatView?.updateActiveFile(activeUri), 500);
+        }
       }
     },
     {
@@ -27,28 +32,35 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 创建状态栏项
+  // Listen for active editor changes, update ChatView's current file in real-time
+  const activeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
+    if (editor && chatView) {
+      chatView.updateActiveFile(editor.document.uri);
+    }
+  });
+
+  // Create status bar item
   const statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
   );
   statusBarItem.text = '$(leaf) Trans-Leaf';
-  statusBarItem.tooltip = 'Trans-Leaf 翻译插件';
+  statusBarItem.tooltip = 'Trans-Leaf Translation Plugin';
   statusBarItem.command = 'transLeaf.showMenu';
   statusBarItem.show();
 
-  // 注册状态栏菜单命令
+  // Register status bar menu command
   const showMenuCommand = vscode.commands.registerCommand(
     'transLeaf.showMenu',
     async () => {
       const options = [
-        { label: '$(file-text) 翻译文件为中文', value: 'translateFileToZh' },
+        { label: '$(file-text) Translate File to Chinese', value: 'translateFileToZh' },
         { label: '$(file-text) Translate File to English', value: 'translateFileToEn' },
-        { label: '$(gear) 设置 (Settings)', value: 'settings' }
+        { label: '$(gear) Settings', value: 'settings' }
       ];
 
       const choice = await vscode.window.showQuickPick(options, {
-        placeHolder: 'Trans-Leaf 菜单'
+        placeHolder: 'Trans-Leaf Menu'
       });
 
       if (choice?.value === 'translateFileToZh') {
@@ -61,11 +73,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 注册翻译选中文本为中文命令
+  // Register translate selected text to Chinese command
   const translateSelectionToZhCommand = vscode.commands.registerCommand(
     'transLeaf.translateSelectionToZh',
     async () => {
-      statusBarItem.text = '$(sync~spin) 翻译中...';
+      statusBarItem.text = '$(sync~spin) Translating...';
       try {
         await translateSelection('zh-CN');
       } finally {
@@ -77,7 +89,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 注册翻译选中文本为英文命令
+  // Register translate selected text to English command
   const translateSelectionToEnCommand = vscode.commands.registerCommand(
     'transLeaf.translateSelectionToEn',
     async () => {
@@ -93,7 +105,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 注册翻译全文为中文命令
+  // Register translate full file to Chinese command
   const translateFileToZhCommand = vscode.commands.registerCommand(
     'transLeaf.translateFileToZh',
     async () => {
@@ -109,7 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 注册翻译全文为英文命令
+  // Register translate full file to English command
   const translateFileToEnCommand = vscode.commands.registerCommand(
     'transLeaf.translateFileToEn',
     async () => {
@@ -125,7 +137,21 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // 添加到订阅列表，确保插件停用时清理
+  // Register write translation result command
+  const writeTranslationCommand = vscode.commands.registerCommand(
+    'transLeaf.writeTranslation',
+    async (translation: string) => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        await editor.edit((editBuilder) => {
+          editBuilder.replace(editor.selection, translation);
+        });
+        vscode.window.showInformationMessage('Translation result written to file');
+      }
+    }
+  );
+
+  // Add to subscriptions list to ensure cleanup on plugin deactivation
   context.subscriptions.push(
     statusBarItem,
     showMenuCommand,
@@ -133,13 +159,15 @@ export function activate(context: vscode.ExtensionContext) {
     translateSelectionToEnCommand,
     translateFileToZhCommand,
     translateFileToEnCommand,
-    chatViewProvider
+    chatViewProvider,
+    activeEditorDisposable,
+    writeTranslationCommand
   );
 }
 
 /**
- * 插件停用函数
+ * Plugin deactivation function
  */
 export function deactivate() {
-  console.log('Trans-Leaf 插件已停用');
+  console.log('Trans-Leaf plugin deactivated');
 }

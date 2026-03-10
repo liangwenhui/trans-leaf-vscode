@@ -20,6 +20,7 @@ export class AgentLoop {
   private messages: Message[] = [];
   private llmClient: LLMClient;
   private toolMap: Map<string, Tool>;
+  alwaysWriteFile: boolean = false;  // 是否自动写入文件，跳过确认
 
   constructor(
     config: LLMConfig,
@@ -36,9 +37,32 @@ export class AgentLoop {
   /**
    * 处理用户消息
    */
-  async handleUserMessage(text: string): Promise<void> {
+  async handleUserMessage(text: string, attachedFile?: { path: string; name: string }): Promise<void> {
+    let content = text;
+    
+    // 如果有附件文件，读取文件内容作为上下文
+    if (attachedFile) {
+      try {
+        const fs = await import('fs/promises');
+        const fileContent = await fs.readFile(attachedFile.path, 'utf-8');
+        content = `【文件: ${attachedFile.name}】
+\`\`\`${attachedFile.name.split('.').pop()}\`\`\`
+${fileContent}
+\`\`\`
+
+---
+
+${text}`;
+      } catch (e) {
+        console.error('[Trans-Leaf] 读取文件失败:', e);
+        content = `【附件文件: ${attachedFile.name} (读取失败)】
+
+${text}`;
+      }
+    }
+    
     // 添加用户消息
-    this.messages.push({ role: 'user', content: text });
+    this.messages.push({ role: 'user', content });
 
     // 开始循环
     await this.runLoop();
@@ -176,8 +200,8 @@ export class AgentLoop {
         continue;
       }
 
-      // 危险工具需要用户确认
-      if (DANGEROUS_TOOLS.has(call.name)) {
+      // 危险工具需要用户确认（除非设置了 alwaysWriteFile）
+      if (DANGEROUS_TOOLS.has(call.name) && !this.alwaysWriteFile) {
         const confirmed = await this.callbacks.onConfirmRequest(call.name, call.arguments);
         if (!confirmed) {
           const cancelMsg = '用户拒绝了此操作';

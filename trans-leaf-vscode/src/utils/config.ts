@@ -10,6 +10,7 @@ export function getConfig(): {
   targetLanguage: 'zh-CN' | 'en';
   concurrency: number;
   apiBaseUrl: string;
+  alwaysWriteFile: boolean;
 } {
   const config = vscode.workspace.getConfiguration('transLeaf');
   return {
@@ -19,6 +20,7 @@ export function getConfig(): {
     targetLanguage: config.get('targetLanguage', 'zh-CN'),
     concurrency: config.get('concurrency', 3),
     apiBaseUrl: config.get('apiBaseUrl', ''),
+    alwaysWriteFile: config.get('alwaysWriteFile', false),
   };
 }
 

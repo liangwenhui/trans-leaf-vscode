@@ -76,6 +76,9 @@ export class ChatView {
           this._panel.webview.postMessage({ type: 'error', error });
         },
       });
+      
+      // 设置 alwaysWriteFile，跳过写文件确认
+      this.agentLoop.alwaysWriteFile = config.alwaysWriteFile;
     } catch (error) {
       console.error('Agent 初始化失败:', error);
       // agentLoop 保持 null，_handleMessage 会发送错误消息
@@ -88,7 +91,7 @@ export class ChatView {
         // 等待 Agent 初始化完成，然后发送消息
         await this._agentReady;
         if (this.agentLoop) {
-          await this.agentLoop.handleUserMessage(message.text);
+          await this.agentLoop.handleUserMessage(message.text, message.attachedFile);
         } else {
           this._panel.webview.postMessage({ type: 'error', error: 'Agent 初始化失败，请检查配置后重试' });
           this._panel.webview.postMessage({ type: 'done' });
@@ -98,6 +101,10 @@ export class ChatView {
         if (this.agentLoop) {
           this.agentLoop.reset();
         }
+        break;
+      case 'embedTranslation':
+        // 将翻译结果嵌入当前文件
+        this._panel.webview.postMessage({ type: 'translateSelection', targetLang: 'en' }); // 用英文翻译作为例子，实际应该用保存的结果
         break;
       case 'confirm-result':
         if (this._pendingConfirm) {
@@ -127,7 +134,36 @@ export class ChatView {
         await this._agentReady;
         this._panel.webview.postMessage({ type: 'config-reloaded' });
         break;
+      case 'pickFile':
+        const activeUri = vscode.window.activeTextEditor?.document.uri;
+        if (activeUri) {
+          this._panel.webview.postMessage({
+            type: 'activeFile',
+            file: { path: activeUri.fsPath, name: activeUri.fsPath.split(/[\\/]/).pop() }
+          });
+        } else {
+          const selected = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            canSelectFolders: false,
+            openLabel: '选择文件'
+          });
+          if (selected && selected[0]) {
+            const uri = selected[0];
+            this._panel.webview.postMessage({
+              type: 'activeFile',
+              file: { path: uri.fsPath, name: uri.fsPath.split(/[\\/]/).pop() }
+            });
+          }
+        }
+        break;
     }
+  }
+
+  public updateActiveFile(uri: vscode.Uri): void {
+    this._panel.webview.postMessage({
+      type: 'activeFile',
+      file: { path: uri.fsPath, name: uri.fsPath.split(/[\\/]/).pop() }
+    });
   }
 
   private _getHtmlForWebview(): string {
@@ -496,6 +532,67 @@ export class ChatView {
       color: var(--vscode-button-foreground);
       border: none;
     }
+
+    /* 文件选择器 */
+    .file-bar {
+      display: flex;
+      align-items: center;
+      padding: 6px 10px 0;
+    }
+    .file-tab {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      max-width: 200px;
+    }
+    .file-tab:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .file-tab svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--vscode-descriptionForeground);
+    }
+    .file-tab .file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 130px;
+    }
+    .file-tab .file-remove {
+      display: none;
+      margin-left: 4px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 14px;
+    }
+    .file-tab .file-remove:hover {
+      color: var(--vscode-errorForeground);
+    }
+    .file-tab.has-file .file-remove {
+      display: inline;
+    }
+    
+    .embed-btn {
+      margin-top: 8px;
+      padding: 4px 12px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .embed-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
   </style>
 </head>
 <body>
@@ -521,6 +618,14 @@ export class ChatView {
     <!-- 底部输入栏 -->
     <div class="input-bar">
       <div class="input-card">
+        <!-- 文件选择器 -->
+        <div class="file-bar">
+          <div class="file-tab" id="fileAttach" title="选择文件">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <span class="file-name" id="fileName"></span>
+            <span class="file-remove" id="fileRemove">×</span>
+          </div>
+        </div>
         <textarea id="chatInput" rows="1" placeholder="输入消息，如：帮我翻译这句话..."></textarea>
         <div class="input-bottom">
           <div class="input-actions">
@@ -550,6 +655,36 @@ export class ChatView {
     const quickChips  = document.getElementById('quickChips');
 
     let targetLang = 'auto';
+    let attachedFile = null;
+    let alwaysWriteFile = false;
+    const MAX_HISTORY = 15;
+    let inputHistory: string[] = [];
+    let historyIndex = -1;
+    let currentInput = '';  // 配置：是否自动写入文件
+
+    // 文件选择器
+    const fileAttach = document.getElementById('fileAttach');
+    const fileNameEl = document.getElementById('fileName');
+
+    function updateFileUI() {
+      if (attachedFile) {
+        fileAttach?.classList.add('has-file');
+        if (fileNameEl) fileNameEl.textContent = attachedFile.name;
+      } else {
+        fileAttach?.classList.remove('has-file');
+        if (fileNameEl) fileNameEl.textContent = '';
+      }
+    }
+
+    fileAttach?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'pickFile' });
+    });
+
+    document.getElementById('fileRemove')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      attachedFile = null;
+      updateFileUI();
+    });
     let isTranslating = false;
     let typingEl = null; // 当前的翻译中气泡
 
@@ -563,7 +698,7 @@ export class ChatView {
       vscode.postMessage({ type: 'translateSelection', targetLang: 'zh-CN' });
     });
     document.getElementById('chipSelEn').addEventListener('click', () => {
-      vscode.postMessage({ type: 'translateSelection', targetLang: 'en' });
+      this._panel.webview.postMessage({ type: 'translateSelection', targetLang: 'en' });
     });
     document.getElementById('chipFileZh').addEventListener('click', () => {
       vscode.postMessage({ type: 'translateFile', targetLang: 'zh-CN' });
@@ -589,6 +724,26 @@ export class ChatView {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         send();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (inputHistory.length > 0) {
+          if (historyIndex === -1) {
+            currentInput = chatInput.value;
+            historyIndex = 0;
+          } else if (historyIndex < inputHistory.length - 1) {
+            historyIndex++;
+          }
+          chatInput.value = inputHistory[historyIndex];
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (historyIndex > 0) {
+          historyIndex--;
+          chatInput.value = inputHistory[historyIndex];
+        } else if (historyIndex === 0) {
+          historyIndex = -1;
+          chatInput.value = currentInput;
+        }
       }
     });
 
@@ -598,9 +753,19 @@ export class ChatView {
       chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
     });
 
-    function send() {
+    const send = function() {
       const text = chatInput.value.trim();
       if (!text || isTranslating) return;
+
+      // 保存到历史记录
+      if (text && !inputHistory.includes(text)) {
+        inputHistory.unshift(text);
+        if (inputHistory.length > MAX_HISTORY) {
+          inputHistory.pop();
+        }
+      }
+      historyIndex = -1;
+      currentInput = '';
 
       // 隐藏欢迎信息
       if (welcomeEl) welcomeEl.style.display = 'none';
@@ -616,7 +781,8 @@ export class ChatView {
       // 发送聊天请求到 Agent
       isTranslating = true;
       sendBtn.disabled = true;
-      vscode.postMessage({ type: 'chat', text });
+      console.log('[Trans-Leaf] Sending chat with file:', attachedFile);
+      vscode.postMessage({ type: 'chat', text, attachedFile });
     }
 
     // ===== 消息气泡 =====
@@ -720,6 +886,11 @@ export class ChatView {
               pre.className = message.isError ? 'tool-error' : '';
               pre.textContent = message.result.slice(0, 2000);
               slot.appendChild(pre);
+              
+              // 如果是翻译结果且开启了 alwaysWriteFile，自动写入
+              if (message.name === 'translateText' && !message.isError && alwaysWriteFile) {
+                vscode.postMessage({ type: 'writeTranslation', text: message.result });
+              }
             }
           }
           scrollToBottom();
@@ -785,6 +956,14 @@ export class ChatView {
 
         case 'config-reloaded':
           addMessage('assistant', '配置已刷新');
+          break;
+
+        case 'activeFile':
+          console.log('[Trans-Leaf] Received activeFile:', message.file);
+          if (message.file) {
+            attachedFile = message.file;
+            updateFileUI();
+          }
           break;
       }
     });
